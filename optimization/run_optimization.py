@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 
+import librosa
 import torch
 import torchvision
 from torch import optim
@@ -9,6 +10,7 @@ from tqdm import tqdm
 
 from criteria.clip_loss import CLIPLoss
 from criteria.id_loss import IDLoss
+from criteria.aclip_loss import CLIPLoss1D
 from mapper.training.train_utils import STYLESPACE_DIMENSIONS
 from models.stylegan2.model import Generator
 import clip
@@ -26,7 +28,11 @@ def get_lr(t, initial_lr, rampdown=0.25, rampup=0.05):
 
 def main(args):
     ensure_checkpoint_exists(args.ckpt)
-    text_inputs = torch.cat([clip.tokenize(args.description)]).cuda()
+    if args.audio:
+      text_inputs, _ = librosa.load(args.audio, sr=16000)
+    else: text_inputs = torch.cat([clip.tokenize(args.description)]).cuda()
+    
+    
     os.makedirs(args.results_dir, exist_ok=True)
 
     g_ema = Generator(args.stylegan_size, 512, 8)
@@ -60,6 +66,8 @@ def main(args):
         latent.requires_grad = True
 
     clip_loss = CLIPLoss(args)
+    if args.audio:
+      clip_loss = CLIPLoss1D(args)
     id_loss = IDLoss(args)
 
     if args.work_in_stylespace:
@@ -137,6 +145,7 @@ if __name__ == "__main__":
     parser.add_argument("--results_dir", type=str, default="results")
     parser.add_argument('--ir_se50_weights', default='../pretrained_models/model_ir_se50.pth', type=str,
                              help="Path to facial recognition network used in ID loss")
+    parser.add_argument("--audio", type=str, default=None)
 
     args = parser.parse_args()
 
